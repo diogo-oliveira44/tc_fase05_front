@@ -1,0 +1,13 @@
+services:
+  front:
+    image: oven/bun:latest
+    command: bun dev
+    environment:
+      PORT: 3001
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - 3001:3001
+    volumes:
+      - '.:/tc_fase05_front'
+    working_dir: '/tc_fase05_front'
