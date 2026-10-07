@@ -8,7 +8,7 @@ on:
 concurrency: deploy-production
 
 jobs:
-  deploy:
+  login:
     name: Azure Container Apps
     runs-on: [self-hosted, linux, x64] # running on my vps
     environment: production
@@ -20,11 +20,40 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Build the front image in the registry
+
+  image:
+    name: production image
+    runs-on: [self-hosted, linux, x64]
+    needs: [login]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build front image
+        run: docker build -t resolveai-front:${{ github.sha }} .
+
+  deploy:
+    name: Azure Container Apps
+    runs-on: [self-hosted, linux, x64] # running on my vps
+    needs: [image]
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # ACR Tasks (az acr build) isn't allowed on this subscription
+      # I am buiding in my vps and pushing the image to azure
+      - name: Build and push the front image
         run: |
-          az acr build -r "${{ vars.ACR_NAME }}" \
-            -t "resolveai-front:${{ github.sha }}" \
-            -t "resolveai-front:latest" .
+          az acr login -n "${{ vars.ACR_NAME }}"
+          image="${{ vars.ACR_NAME }}.azurecr.io/resolveai-front"
+          docker build -t "$image:${{ github.sha }}" -t "$image:latest" .
+          docker push "$image:${{ github.sha }}"
+          docker push "$image:latest"
 
       - name: Roll out a new revision
         run: |
